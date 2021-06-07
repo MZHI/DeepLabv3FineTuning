@@ -8,6 +8,7 @@ from torch.utils import data
 import datahandler
 from model import createDeepLabv3
 from trainer import train_model
+from torchvision import transforms
 
 
 @click.command()
@@ -29,7 +30,7 @@ from trainer import train_model
 def main(data_directory, exp_directory, epochs, batch_size):
     # Create the deeplabv3 resnet101 model which is pretrained on a subset
     # of COCO train2017, on the 20 categories that are present in the Pascal VOC dataset.
-    model = createDeepLabv3()
+    model = createDeepLabv3(outputchannels=1)
     model.train()
     data_directory = Path(data_directory)
     # Create the experiment directory if not present
@@ -38,23 +39,34 @@ def main(data_directory, exp_directory, epochs, batch_size):
         exp_directory.mkdir()
 
     # Specify the loss function
-    criterion = torch.nn.MSELoss(reduction='mean')
+    # criterion = torch.nn.MSELoss(reduction='mean')
+    criterion = torch.nn.CrossEntropyLoss()
     # Specify the optimizer with a lower learning rate
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
 
     # Specify the evaluation metrics
     metrics = {'f1_score': f1_score, 'auroc': roc_auc_score}
 
-    # Create the dataloader
-    dataloaders = datahandler.get_dataloader_single_folder(
-        data_directory, batch_size=batch_size)
+    # set transforms
+    imagenet_stats = [[0.485, 0.456, 0.406], [0.485, 0.456, 0.406]]
+    data_transforms = transforms.Compose([transforms.Resize((1088, 1088)),
+                                          # transforms.CenterCrop(1088),
+                                          transforms.ToTensor(),
+                                          # transforms.Normalize(mean=imagenet_stats[0],
+                                          #                 std=imagenet_stats[1])])
+                                          ])
+
+    # Create the dataloaders
+    dataloaders = datahandler.get_dataloader_sep_folder(
+        data_directory, batch_size=batch_size, data_transforms=data_transforms)
     _ = train_model(model,
                     criterion,
                     dataloaders,
                     optimizer,
                     bpath=exp_directory,
                     metrics=metrics,
-                    num_epochs=epochs)
+                    num_epochs=epochs,
+                    device="cuda:1")
 
     # Save the trained model
     torch.save(model, exp_directory / 'weights.pt')
