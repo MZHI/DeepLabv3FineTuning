@@ -9,7 +9,8 @@ from segdataset import SegmentationDataset
 def get_dataloader_sep_folder(data_dir: str,
                               image_folder: str = 'Image',
                               mask_folder: str = 'Mask',
-                              batch_size: int = 4):
+                              batch_size: int = 4,
+                              data_transforms=None):
     """ Create Train and Test dataloaders from two
         separate Train and Test folders.
         The directory structure should be as follows.
@@ -39,13 +40,15 @@ def get_dataloader_sep_folder(data_dir: str,
         dataloaders: Returns dataloaders dictionary containing the
         Train and Test dataloaders.
     """
-    data_transforms = transforms.Compose([transforms.ToTensor()])
+    if data_transforms is None:
+        data_transforms = transforms.Compose([transforms.ToTensor()])
 
     image_datasets = {
         x: SegmentationDataset(root=Path(data_dir) / x,
                                transforms=data_transforms,
                                image_folder=image_folder,
-                               mask_folder=mask_folder)
+                               mask_folder=mask_folder,
+                               mask_color_mode='rgb')
         for x in ['Train', 'Test']
     }
     dataloaders = {
