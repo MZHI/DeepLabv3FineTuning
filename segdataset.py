@@ -8,6 +8,7 @@ from typing import Any, Callable, Optional
 import numpy as np
 from PIL import Image
 from torchvision.datasets.vision import VisionDataset
+import torch
 
 
 class SegmentationDataset(VisionDataset):
@@ -65,6 +66,10 @@ class SegmentationDataset(VisionDataset):
         self.image_color_mode = image_color_mode
         self.mask_color_mode = mask_color_mode
 
+        self.categories = {0: [0, 0, 0], 1: [128, 64, 128], 2: [130, 76, 0], 3: [107, 142, 35],
+                           4: [255, 22, 96], 5: [102, 51, 0], 6: [9, 143, 150],
+                           7: [119, 11, 32], 8: [112, 150, 146], 9: [48, 41, 30]}
+
         if not fraction:
             self.image_names = sorted(image_folder_path.glob("*"))
             self.mask_names = sorted(mask_folder_path.glob("*"))
@@ -99,8 +104,7 @@ class SegmentationDataset(VisionDataset):
     def __getitem__(self, index: int) -> Any:
         image_path = self.image_names[index]
         mask_path = self.mask_names[index]
-        with open(image_path, "rb") as image_file, open(mask_path,
-                                                        "rb") as mask_file:
+        with open(image_path, "rb") as image_file, open(mask_path, "rb") as mask_file:
             image = Image.open(image_file)
             if self.image_color_mode == "rgb":
                 image = image.convert("RGB")
@@ -111,8 +115,26 @@ class SegmentationDataset(VisionDataset):
                 mask = mask.convert("RGB")
             elif self.mask_color_mode == "grayscale":
                 mask = mask.convert("L")
+
+            w, h = image.size
+
+            # convert RGB mask to label image base on self.categories dict
+            img_arr = np.asarray(mask)
+            img_grayscale = np.zeros((h, w))
+            for cat_id in sorted(list(self.categories.keys())):
+                clr = self.categories[cat_id]
+                if cat_id == 0:
+                    continue
+
+                clr_arr = np.repeat(np.array(clr[::-1])[None, :], w * h, axis=0).reshape(h, w, 3)
+                pixels_mask = np.all(img_arr == clr_arr, axis=-1)
+                img_grayscale[pixels_mask] = cat_id
+
+            mask = Image.fromarray(img_grayscale, mode='L')
+
             sample = {"image": image, "mask": mask}
             if self.transforms:
                 sample["image"] = self.transforms(sample["image"])
                 sample["mask"] = self.transforms(sample["mask"])
+                sample["mask"] = torch.squeeze(sample["mask"])
             return sample
